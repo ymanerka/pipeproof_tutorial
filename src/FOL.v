@@ -3441,6 +3441,9 @@ Fixpoint GetLocations
   | h::t => GetLocations t (GetLocationsHelper h l)
   end.
 
+(* Extracted to a function in BackendLinux.ml. *)
+Definition UseChainInvariants (b : bool) := false.
+
 (* Create an axioms-mapping-theory-invariants (AMTI) ScenarioTree for the microarchitecture and state. *)
 Definition CreateAMTITree
   (s : FOLState)
@@ -3451,7 +3454,12 @@ Definition CreateAMTITree
   let axioms_tree := EliminateQuantifiers true true stage_names s axioms [] in
   let mapping_tree := EliminateQuantifiers true true stage_names s mapping [] in
   let theory_tree := EliminateQuantifiers true true stage_names s theory [] in
-  let inv_tree := EliminateQuantifiers true true stage_names s inv [] in
+  let inv_tree :=
+    if UseChainInvariants true then
+        EliminateQuantifiers true true stage_names s inv []
+    else
+        ScenarioTrue
+  in
   ScenarioAnd (ScenarioAnd (ScenarioAnd axioms_tree mapping_tree) theory_tree) inv_tree.
 
 Fixpoint CreateLayersTree
@@ -3851,7 +3859,7 @@ Fixpoint ReplaceWithInvariantsOuter
   | _ => Warning ([], []) ["Unexpected pattern in ReplaceWithInvariantsOuter!"]
   end.
 
-Definition InvPatterns :=
+Definition InvPatternsInner :=
   [
     ((Rel EdgePO), EdgePO_plus);
     ((Rel EdgePPO), EdgePPO_plus);
@@ -3875,7 +3883,7 @@ Definition InvariantifyChain
       l
   in
   let inter := Map (fun x => mkMicroop 0 0 0 0 (Fence [])) ([]::l) in
-  let '(chain, _) := ReplaceWithInvariantsOuter l inter InvPatterns in
+  let '(chain, _) := ReplaceWithInvariantsOuter l inter (if UseChainInvariants true then InvPatternsInner else []) in
   let chain :=
     if PrintFlag 2 then
       Comment chain (["Invariantified chain is "] ++ (PrintISAChain chain))
@@ -4589,7 +4597,7 @@ Definition ProveInvariant
   (inv : FOLFormula)
   : bool :=
   let amti := (amt, other_invs) in
-  match FindInv InvPatterns inv with
+  match FindInv (if UseChainInvariants true then InvPatternsInner else []) inv with
   | None => Warning false ["Could not find invariant!"]
   | Some (pat, inv_edge) =>
       let pat := Comment pat ["Found invariant for "; PrintISAEdge inv_edge] in
@@ -4975,7 +4983,7 @@ Definition TransitiveChain
       let mapping := BuildMicroarchitecture [mapping] in
       let theory := BuildMicroarchitecture [theory] in
       let axioms := PrintTimestamp axioms "Inv_proof_start" in
-      if negb (ProveInvariants m (axioms, mapping, theory) inv) then
+      if andb (UseChainInvariants true) (negb (ProveInvariants m (axioms, mapping, theory) inv)) then
         let result := Some [] in
         let result := PrintTimestamp result "Inv_proof_end_failure" in
         Warning result ["Invariants could not be proven! Aborting."]
@@ -5538,12 +5546,12 @@ Fixpoint CheckAxioms
       match h with
       | Irr pat =>
           let max_depth := PrintTimestamp max_depth "TC_start" in
-          match TransitiveChain max_depth m h InvPatterns with
+          match TransitiveChain max_depth m h (if UseChainInvariants true then InvPatternsInner else []) with
           | None =>
               let h := PrintTimestamp h "TC_end_success" in
               let h := Comment h (["Transitive chain passed successfully for "] ++ (PrintISAPattern pat)) in
                       let h := PrintTimestamp h "CycleCheck_start" in
-                      match CycleCheck max_depth m h InvPatterns with
+                      match CycleCheck max_depth m h (if UseChainInvariants true then InvPatternsInner else []) with
                       | None => 
                           let t := PrintTimestamp t "CycleCheck_end_success" in
                           let t := PrintTimestamp t "Axiom_end_success" in

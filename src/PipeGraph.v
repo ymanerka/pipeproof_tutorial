@@ -88,6 +88,8 @@ Extract Constant DoGenCex => "( BackendLinux.doGenCex )".
 
 Extract Constant LowerThanBound => "( BackendLinux.lowerThanBound )".
 
+Extract Constant UseChainInvariants => "( BackendLinux.useChainInvariants )".
+
 (*
 Extract Constant zero => "'λ000'".
 Extract Constant one => "'λ001'".

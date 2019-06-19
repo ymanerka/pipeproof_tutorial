@@ -14,7 +14,7 @@ StageName 0 "Fetch".
 StageName 1 "Execute".
 StageName 2 "Writeback".
 
-Axiom "Writes_Path":
+Axiom "Instr_Path":
 forall microops "i",
 AddEdges [((i, Fetch),      (i, Execute),     "path");
           ((i, Execute),     (i, Writeback),    "path")
@@ -23,20 +23,20 @@ AddEdges [((i, Fetch),      (i, Execute),     "path");
 Axiom "PO_Fetch":
 forall microops "i1",
 forall microops "i2",
-SameCore i1 i2 /\ ProgramOrder i1 i2 /\ ~SameMicroop i1 i2 =>
+SameCore i1 i2 /\ ProgramOrder i1 i2 =>
 AddEdge ((i1, Fetch), (i2, Fetch), "PO", "blue").
 
 Axiom "Execute_stage_is_in_order":
 forall microops "i1",
 forall microops "i2",
-SameCore i1 i2 /\ EdgeExists ((i1, Fetch),  (i2, Fetch), "") /\ ~SameMicroop i1 i2 =>
+SameCore i1 i2 /\ EdgeExists ((i1, Fetch),  (i2, Fetch), "") =>
 AddEdge ((i1, Execute), (i2, Execute), "PPO", "darkgreen").
 
 % Note: This enforces ordering at WB if ordering is enforced at IF.
 Axiom "Writeback_stage_is_in_order":
 forall microops "i1",
 forall microops "i2",
-SameCore i1 i2 /\ EdgeExists ((i1, Fetch),  (i2, Fetch), "") /\ ~SameMicroop i1 i2 =>
+SameCore i1 i2 /\ EdgeExists ((i1, Fetch),  (i2, Fetch), "") =>
 AddEdge ((i1, Writeback), (i2, Writeback), "PPO", "darkgreen").
 
 Axiom "WriteSerialization":
@@ -53,10 +53,10 @@ Axiom "EnforceFinalWrite":
    ~SameMicroop w w' /\ DataFromFinalStateAtPA w') =>
       AddEdge ((w, Writeback), (w', Writeback), "ws_final", "red").
 
-Axiom "EnforceWriteOrdering":
+Axiom "EnforceWritePPO":
   forall microop "w",
   forall microop "i",
-  (IsAnyWrite w /\ SameCore w i /\ EdgeExists((w, Fetch), (i, Fetch), "") /\ SamePhysicalAddress w i /\ ~SameMicroop w i) =>
+  (IsAnyWrite w /\ SameCore w i /\ EdgeExists((w, Fetch), (i, Fetch), "")) =>
       AddEdge ((w, Writeback), (i, Execute), "EWO", "green").
 
 % Constraints on values read by loads follow.
@@ -71,7 +71,7 @@ DefineMacro "BeforeAllWrites":
 DefineMacro "Before_Or_After_Every_SameAddrWrite":
   % Either before or after every write to the same physical address
   forall microop "w", (
-    (IsAnyWrite w /\ SamePhysicalAddress w i /\ ~SameMicroop w i) =>
+    (IsAnyWrite w /\ SamePhysicalAddress w i) =>
     (AddEdge ((w, Writeback), (i, Execute), "wsrf", "crimson") \/
      AddEdge ((i, Execute), (w, Writeback), "fr", "red"))).
 
@@ -98,16 +98,35 @@ IsAnyRead i =>
       )
 ).
 
-Axiom "Mappings":
+Axiom "Mapping_po":
 forall microop "i",
 forall microop "j",
-(HasDependency po i j => AddEdge ((i, Fetch), (j, Fetch), "po_arch", "blue")) /\
-(HasDependency ppo i j => HasDependency po i j /\ (~(IsAnyWrite i /\ IsAnyRead j))) /\
-(HasDependency co i j => AddEdge ((i, Writeback), (j, Writeback), "co_arch", "blue")) /\
-(HasDependency rf i j => AddEdge ((i, Writeback), (j, Execute), "rf_arch", "red")) /\
-(HasDependency fr i j => AddEdge ((i, Execute), (j, Writeback), "fr_arch", "blue")) /\
-(HasDependency fence i j => (AddEdge ((i, Fetch), (j, Fetch), "po_arch", "blue") /\
-    ((IsAnyWrite i /\ IsAnyRead j) => AddEdge ((i, Writeback), (j, Execute), "fence_arch", "blue")))).
+(HasDependency po i j => AddEdge ((i, Fetch), (j, Fetch), "po_arch", "blue")).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 1. Add the mapping from "co" ISA-level edges to their equivalent            %
+%    microarchitectural constraints.                                          %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Axiom "Mapping_co":
+forall microop "i",
+forall microop "j",
+(HasDependency co i j => SamePhysicalAddress i j /\ AddEdge ((i, _________), (j, _________), "co_arch", "blue")).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% END MODIFICATION REGION                                                     %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Axiom "Mapping_rf":
+forall microop "i",
+forall microop "j",
+(HasDependency rf i j => AddEdge ((i, Writeback), (j, Execute), "rf_arch", "red")).
+
+Axiom "Mapping_fr":
+forall microop "i",
+forall microop "j",
+(HasDependency fr i j => AddEdge ((i, Execute), (j, Writeback), "fr_arch", "blue")).
 
 Axiom "Theory_Lemmas":
 forall microops "i",
@@ -125,40 +144,36 @@ forall microops "j",
 (IsAnyWrite i => ~IsAnyRead i) /\ (IsAnyRead i => ~IsAnyWrite i) /\
 (IsAnyRead i \/ IsAnyWrite i) /\
 (SameMicroop i j => SameCore i j) /\
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 2. Add the theory lemma for transitivity of the SamePhysicalAddress         %
+%    predicate.                                                               %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 (forall microops "k",
-(SameCore i j /\ SameCore j k => SameCore i k) /\
-(SamePhysicalAddress i j /\ SamePhysicalAddress j k => SamePhysicalAddress i k)) /\
+(SamePhysicalAddress _ _ /\ SamePhysicalAddress _ _ => SamePhysicalAddress _ _) /\
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% END MODIFICATION REGION                                                     %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+(SameCore i j /\ SameCore j k => SameCore i k)) /\
 (HasDependency po_loc i j => HasDependency po i j /\ SameVirtualAddress i j /\ SamePhysicalAddress i j) /\
 (HasDependency rfe i j => HasDependency rf i j /\ ~SameCore i j) /\
-(HasDependency fre i j => HasDependency fr i j /\ ~SameCore i j) /\
-(HasDependency fence i j => SameCore i j).
+(HasDependency fre i j => HasDependency fr i j /\ ~SameCore i j).
 
-Axiom "Invariant_polocplus":
-forall microop "i",
-forall microop "j",
-HasDependency po_loc_plus i j =>
-  (AddEdge ((i, Fetch), (j, Fetch), "") /\ SameCore i j /\ SamePhysicalAddress i j).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 3. Uncomment the chain invariant for "po+" i.e. chains of repeated po edges.%
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Axiom "Invariant_ppoplus":
-forall microop "i",
-forall microop "j",
-HasDependency ppo_plus i j =>
-  (AddEdge ((i, Fetch), (j, Fetch), "") /\ SameCore i j /\ ~(IsAnyWrite i /\ IsAnyRead j)).
+%Axiom "Invariant_poplus":
+%forall microop "i",
+%forall microop "j",
+%HasDependency po_plus i j =>
+%  (AddEdge ((i, Fetch), (j, Fetch), "") /\ SameCore i j).
 
-Axiom "Invariant_fenceplus":
-forall microop "i",
-forall microop "j",
-HasDependency fence_plus i j =>
-  (AddEdge ((i, Fetch), (j, Fetch), "") /\ SameCore i j /\ ((IsAnyWrite i /\ IsAnyRead j) => AddEdge ((i, Writeback), (j, Execute), "fence_plus", "blue"))).
-
-Axiom "Invariant_FencePPO_plus":
-forall microop "i",
-forall microop "j",
-HasDependency FencePPO_plus i j =>
-  (AddEdge ((i, Fetch), (j, Fetch), "") /\ SameCore i j /\ ((IsAnyWrite i /\ IsAnyRead j) => AddEdge ((i, Writeback), (j, Execute), "fence_poplus", "blue"))).
-
-Axiom "Invariant_PPOFence_plus":
-forall microop "i",
-forall microop "j",
-HasDependency PPOFence_plus i j =>
-  (AddEdge ((i, Fetch), (j, Fetch), "") /\ SameCore i j /\ ((IsAnyWrite i /\ IsAnyRead j) => AddEdge ((i, Writeback), (j, Execute), "fence_poplus", "blue"))).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% END MODIFICATION REGION                                                     %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

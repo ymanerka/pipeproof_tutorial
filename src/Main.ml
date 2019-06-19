@@ -62,6 +62,7 @@ let speclist = [
   ("-l", Arg.String update_isa_mcm, "ISA-level MCM for PipeProof (valid values are \"SC\" and \"TSO\" (no quotes) )");
   ("-x", Arg.Set    genCex, "Try to generate cyclic counterexample if TC abstraction support proof fails (default is no)");
   ("-b", Arg.Int    update_cex_bound, "Max size of cyclic counterexample to generate (value only used if -x is also provided, default is 10)");
+  ("-n", Arg.Set    dontUseChainInvs, "Don't use chain invariants (default is to use chain invs)");
   ("-f", Arg.Int    update_filter_strat, "TC filtering strategy for PipeProof:
     0: filter both before and after applying chain invariants
     1: filter only after applying chain invariants (default)

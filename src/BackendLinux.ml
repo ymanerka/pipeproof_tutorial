@@ -16,6 +16,8 @@ let genCex = ref false
 
 let cexBound = ref 10
 
+let dontUseChainInvs = ref false
+
 let doGenCex n = !genCex == n
 
 let belowCPThresholdInternal n = n < !cpThreshold
@@ -35,6 +37,8 @@ let lastUpdateCheck = ref (Sys.time())
 let printTimestamp x y = Printf.fprintf !outfile "\nTIMESTAMP,%s,%f\n" y (Sys.time()); x
 
 let lowerThanBound n = n < !cexBound
+
+let useChainInvariants n = (not(!dontUseChainInvs) == n)
 
 let timeForStatusUpdate _ =
   if printFlag 3
