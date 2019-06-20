@@ -196,7 +196,7 @@ let first_observable_graph =
   in
 
   let result_string =
-    if observable then "// Microarchitecture could not be proven! See end of output file for any failing fragment and/or counterexample." else "// Microarchitecture is correct for all programs!"
+    if observable then "// Microarchitecture could not be proven! See end of output file for any failing fragment and/or counterexample." else "STATUS: Microarchitecture is correct for all programs!"
   in
 
   Printf.printf "%s\n" result_string
