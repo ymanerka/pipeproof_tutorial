@@ -4638,10 +4638,13 @@ Definition ProveInvariants
   (amt : FOLFormula * FOLFormula * FOLFormula)
   (invs : list FOLStatement)
   : bool :=
+  let invs := Println invs [newline; "STATUS: Beginning Proof of Chain Invariants"; newline] in
   let invs := SplitInvariants invs in
   let invs := Map (fun x => [x]) invs in
   let invs := Map BuildMicroarchitecture invs in
-  ProveInvariantsHelper (List.length invs) m amt invs.
+  let result := ProveInvariantsHelper (List.length invs) m amt invs in
+  Println result [newline; "STATUS: Proof of Chain Invariants Complete"; newline].
+
 
 Fixpoint GenISAEdgeTree
   (a : Microop)
@@ -4992,6 +4995,7 @@ Definition TransitiveChain
          no meaning besides the global ID, since everything else will be a variable.
          Fences are the easiest to create so I've made them both fences. *)
       let inv := PrintTimestamp inv "Inv_proof_end_success" in
+      let inv := Println inv [newline; "STATUS: Beginning TC Abstraction Support Proof"; newline] in
       let inv := BuildMicroarchitecture [inv] in
       let uop_a := mkMicroop 0 0 0 0 (Fence []) in
       let uop_b := mkMicroop 1 0 0 0 (Fence []) in
@@ -5024,7 +5028,9 @@ Definition TransitiveChain
                 match TCInductiveCase 3 amti (StageNames m) locations uop_a uop_b uop_c tchains inv_patterns with
                 | Some s'' => let s'' := Comment s'' ("TC failing fragment is "::(PrintISAChain (rev s''))) in
                     Comment (Some (GenCounterexample pat amti (StageNames m) s'')) ["Transitive Chain Inductive Case returned SAT!"]
-                | None => Comment None ["Transitive Chain Inductive Case returned UNSAT."]
+                | None =>
+                    let result := Println None [newline; "STATUS: TC Abstraction Support Proof Complete"; newline] in
+                    Comment result ["Transitive Chain Inductive Case returned UNSAT."]
                 end
       end
   end.
@@ -5480,6 +5486,7 @@ Definition CycleCheck
   : option (list (list ISAEdge)) :=
   match (pattern, FilterUspecInput m [] [] [] []) with
   | (Irr pat, (axioms, mapping, theory, inv)) =>
+      let axioms := Println axioms [newline; "STATUS: Beginning Microarchitectural Correctness Proof"; newline] in
       let axioms := BuildMicroarchitecture [axioms] in
       let mapping := BuildMicroarchitecture [mapping] in
       let theory := BuildMicroarchitecture [theory] in
@@ -5516,7 +5523,10 @@ Definition CycleCheck
           let locations := GetLocations m [] in
           match CycleCheckSolve 2 (axioms, mapping, theory, inv) (StageNames m) locations pat [uop_a; uop_b] inv_patterns with
           | Some s'' => Comment (Some s'') ["Cycle check returned SAT, returning."]
-          | None => Comment None ["Cycle check returned UNSAT."]
+          | None =>
+                let result : option (list (list ISAEdge)) := None in
+                let result := Println result [newline; "STATUS: Microarchitectural Correctness Proof complete."; newline] in
+                Comment None ["Cycle check returned UNSAT."]
           end
       end
   end.
@@ -5546,6 +5556,7 @@ Fixpoint CheckAxioms
       match h with
       | Irr pat =>
           let max_depth := PrintTimestamp max_depth "TC_start" in
+          let max_depth := Println max_depth ([newline; "STATUS: Checking irr "] ++ PrintISAPattern pat ++ [newline]) in
           match TransitiveChain max_depth m h (if UseChainInvariants true then InvPatternsInner else []) with
           | None =>
               let h := PrintTimestamp h "TC_end_success" in
